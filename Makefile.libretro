@@ -1,5 +1,5 @@
 NTSC = 0
-DEBUG = 0
+DEBUG = 1
 LOGSOUND = 0
 
 GENPLUS_SRC_DIR := source
@@ -71,6 +71,14 @@ else ifeq ($(platform), wii)
    CC = $(DEVKITPPC)/bin/powerpc-eabi-gcc$(EXE_EXT)
    AR = $(DEVKITPPC)/bin/powerpc-eabi-ar$(EXE_EXT)
    PLATFORM_DEFINES := -DGEKKO -DHW_RVL -mrvl -mcpu=750 -meabi -mhard-float -DALT_RENDER
+else ifeq ($(platform), pandora)
+   TARGET := libretro.so
+   fpic := -fPIC
+   SHARED := $(LDFLAGS) -shared -Wl,--version-script=libretro/link.T -Wl,--no-undefined -lz
+   ENDIANNESS_DEFINES := -DLSB_FIRST
+   CC = arm-angstrom-linux-gnueabi-gcc$(EXE_EXT)
+   AR = arm-angstrom-linux-gnueabi-ar$(EXE_EXT)
+   PLATFORM_DEFINES := -DHAVE_ZLIB -DPANDORA -DUSE_CYCLONE
 else
    TARGET := retro.dll
    CC = gcc
@@ -89,7 +97,15 @@ ifeq ($(DEBUG), 1)
 else
    CFLAGS += -O3 -DNDEBUG
 endif
-	
+
+M68K_CPU_SOURCE := $(GENPLUS_SRC_DIR)/m68k/m68kcpu.c \
+			$(GENPLUS_SRC_DIR)/m68k/s68kcpu.c \
+
+ifeq ($(platform), pandora)
+   M68K_CPU_SOURCE := $(GENPLUS_SRC_DIR)/m68k/Cyclone/musa_wrapper.c \
+			$(GENPLUS_SRC_DIR)/m68k/Cyclone/Cyclone.s
+endif
+
 LIBRETRO_SRC := $(GENPLUS_SRC_DIR)/genesis.c \
 			$(GENPLUS_SRC_DIR)/vdp_ctrl.c \
 			$(GENPLUS_SRC_DIR)/vdp_render.c \
@@ -135,11 +151,11 @@ LIBRETRO_SRC := $(GENPLUS_SRC_DIR)/genesis.c \
 			$(GENPLUS_SRC_DIR)/sound/sn76489.c \
 			$(GENPLUS_SRC_DIR)/sound/blip.c \
 			$(GENPLUS_SRC_DIR)/z80/z80.c \
-			$(GENPLUS_SRC_DIR)/m68k/m68kcpu.c \
-			$(GENPLUS_SRC_DIR)/m68k/s68kcpu.c \
+			$(M68K_CPU_SOURCE) \
 			$(LIBRETRO_DIR)/libretro.c
 
 LIBRETRO_OBJ := $(LIBRETRO_SRC:.c=.o)
+LIBRETRO_OBJ := $(LIBRETRO_OBJ:.s=.o)
 
 ifeq ($(LOGSOUND), 1)
 LIBRETRO_CFLAGS := -DLOGSOUND
@@ -177,6 +193,13 @@ all: $(TARGET)
 
 %.o: %.c
 	$(CC) -o $@ -c $< $(CFLAGS) $(LIBRETRO_CFLAGS)
+
+%.o: %.s
+	$(CC) -o $@ -c $< $(CFLAGS) $(LIBRETRO_CFLAGS)
+
+#.PHONY: $(GENPLUS_SRC_DIR)/m68k/Cyclone/Cyclone.s
+$(GENPLUS_SRC_DIR)/m68k/Cyclone/Cyclone.s:
+	$(MAKE) -C $(GENPLUS_SRC_DIR)/m68k/Cyclone/
 
 $(TARGET): $(LIBRETRO_OBJ)
 ifeq ($(platform), sncps3)
